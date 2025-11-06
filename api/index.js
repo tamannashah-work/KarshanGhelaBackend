@@ -92,4 +92,7 @@ app.post('/contact', async (req, res) => {
 
 app.get('/health', (req, res) => res.json({ status: "ok" }));
 
-export default serverless(app);
+const handler = serverless(app);
+
+// ⬅️ Very important: default export must be a named constant for Vercel runtime
+export default handler;
