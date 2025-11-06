@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { MongoClient, ObjectId } from 'mongodb';
+import { MongoClient } from 'mongodb';
 import serverless from 'serverless-http';
 
 dotenv.config();
@@ -23,20 +23,17 @@ if (!cached) {
 }
 
 async function connectDB() {
-  if (db) return db;
+  if (cached.conn) {
+    return cached.conn.db;
+  }
 
   const uri = process.env.MONGO_URI;
   if (!uri) {
-    throw new Error("Please define the MONGO_URI environment variable inside .env");
+    throw new Error("Please define the MONGO_URI environment variable");
   }
 
   if (!cached.promise) {
-    const opts = {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    };
-
-    cached.promise = MongoClient.connect(uri, opts).then((client) => {
+    cached.promise = MongoClient.connect(uri).then((client) => {
       return {
         client,
         db: client.db(process.env.MONGO_DB || 'KarshanGhela'),
@@ -54,7 +51,8 @@ async function connectDB() {
   return cached.conn.db;
 }
 
-app.get('/products', async (req, res) => {
+// Routes with /api prefix
+app.get('/api/products', async (req, res) => {
   try {
     const database = await connectDB();
     const products = await database.collection('products').find({}).sort({ display_order: 1 }).toArray();
@@ -70,7 +68,7 @@ app.get('/products', async (req, res) => {
   }
 });
 
-app.get('/products/featured', async (req, res) => {
+app.get('/api/products/featured', async (req, res) => {
   try {
     const database = await connectDB();
     const products = await database.collection('products').find({ is_featured: true }).sort({ display_order: 1 }).toArray();
@@ -86,7 +84,7 @@ app.get('/products/featured', async (req, res) => {
   }
 });
 
-app.get('/categories', async (req, res) => {
+app.get('/api/categories', async (req, res) => {
   try {
     const database = await connectDB();
     const categories = await database.collection('categories').find({}).sort({ display_order: 1 }).toArray();
@@ -97,7 +95,7 @@ app.get('/categories', async (req, res) => {
   }
 });
 
-app.get('/testimonials', async (req, res) => {
+app.get('/api/testimonials', async (req, res) => {
   try {
     const database = await connectDB();
     const testimonials = await database.collection('testimonials').find({ is_active: true }).sort({ display_order: 1 }).toArray();
@@ -108,7 +106,7 @@ app.get('/testimonials', async (req, res) => {
   }
 });
 
-app.post('/contact', async (req, res) => {
+app.post('/api/contact', async (req, res) => {
   try {
     const database = await connectDB();
     const submission = { ...req.body, status: 'pending', created_at: new Date() };
@@ -120,8 +118,23 @@ app.post('/contact', async (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running on Vercel' });
+});
+
+// Root route
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Karshan Ghela API',
+    endpoints: [
+      '/api/health',
+      '/api/products',
+      '/api/products/featured',
+      '/api/categories',
+      '/api/testimonials',
+      '/api/contact (POST)'
+    ]
+  });
 });
 
 export default serverless(app);
