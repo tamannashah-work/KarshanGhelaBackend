@@ -1,98 +1,102 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import serverless from 'serverless-http';
 
 dotenv.config();
 
 const app = express();
 
-// ✅ Proper CORS
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
-
+app.use(cors());
 app.use(express.json());
 
-// ✅ Correct MongoDB connection caching for Vercel
-let cached = global.mongo;
-if (!cached) cached = global.mongo = { conn: null, promise: null };
+let db;
+let client;
 
 async function connectDB() {
-  if (cached.conn) return cached.conn.db;
+  if (db) return db;
 
-  const uri = process.env.MONGO_URI;
-  if (!uri) throw new Error("MONGO_URI missing");
-
-  if (!cached.promise) {
-    cached.promise = new MongoClient(uri).connect().then((client) => {
-      return { client, db: client.db("KarshanGhela") };
-    });
+  const uri = process.env.MONGO_URI || process.env.VITE_MONGO_URI;
+  if (!uri) {
+    throw new Error('MONGO_URI environment variable is not defined');
   }
 
-  cached.conn = await cached.promise;
-  return cached.conn.db;
+  client = new MongoClient(uri);
+  await client.connect();
+  db = client.db('KarshanGhela');
+  console.log('Connected to MongoDB (serverless)');
+  return db;
 }
 
-// ✅ Routes
 app.get('/products', async (req, res) => {
   try {
-    const db = await connectDB();
-    const products = await db.collection('products').find({}).sort({ display_order: 1 }).toArray();
-    const categories = await db.collection('categories').find({}).toArray();
-    const map = Object.fromEntries(categories.map(c => [c._id.toString(), c]));
-    res.json(products.map(p => ({ ...p, category: map[p.category_id?.toString()] || null })));
-  } catch {
-    res.status(500).json({ error: "Failed to fetch products" });
+    const database = await connectDB();
+    const products = await database.collection('products').find({}).sort({ display_order: 1 }).toArray();
+    const categories = await database.collection('categories').find({}).toArray();
+
+    const categoryMap = Object.fromEntries(categories.map(cat => [cat._id.toString(), cat]));
+    const productsWithCategory = products.map(p => ({ ...p, category: categoryMap[p.category_id?.toString()] || null }));
+
+    res.json(productsWithCategory);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch products' });
   }
 });
 
 app.get('/products/featured', async (req, res) => {
   try {
-    const db = await connectDB();
-    const products = await db.collection('products').find({ is_featured: true }).sort({ display_order: 1 }).toArray();
-    const categories = await db.collection('categories').find({}).toArray();
-    const map = Object.fromEntries(categories.map(c => [c._id.toString(), c]));
-    res.json(products.map(p => ({ ...p, category: map[p.category_id?.toString()] || null })));
-  } catch {
-    res.status(500).json({ error: "Failed to fetch featured products" });
+    const database = await connectDB();
+    const products = await database.collection('products').find({ is_featured: true }).sort({ display_order: 1 }).toArray();
+    const categories = await database.collection('categories').find({}).toArray();
+
+    const categoryMap = Object.fromEntries(categories.map(cat => [cat._id.toString(), cat]));
+    const productsWithCategory = products.map(p => ({ ...p, category: categoryMap[p.category_id?.toString()] || null }));
+
+    res.json(productsWithCategory);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch featured products' });
   }
 });
 
 app.get('/categories', async (req, res) => {
   try {
-    const db = await connectDB();
-    res.json(await db.collection('categories').find({}).sort({ display_order: 1 }).toArray());
-  } catch {
-    res.status(500).json({ error: "Failed to fetch categories" });
+    const database = await connectDB();
+    const categories = await database.collection('categories').find({}).sort({ display_order: 1 }).toArray();
+    res.json(categories);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch categories' });
   }
 });
 
 app.get('/testimonials', async (req, res) => {
   try {
-    const db = await connectDB();
-    res.json(await db.collection('testimonials').find({ is_active: true }).sort({ display_order: 1 }).toArray());
-  } catch {
-    res.status(500).json({ error: "Failed to fetch testimonials" });
+    const database = await connectDB();
+    const testimonials = await database.collection('testimonials').find({ is_active: true }).sort({ display_order: 1 }).toArray();
+    res.json(testimonials);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch testimonials' });
   }
 });
 
 app.post('/contact', async (req, res) => {
   try {
-    const db = await connectDB();
-    const result = await db.collection('contact_submissions').insertOne({ ...req.body, status: 'pending', created_at: new Date() });
+    const database = await connectDB();
+    const submission = { ...req.body, status: 'pending', created_at: new Date() };
+    const result = await database.collection('contact_submissions').insertOne(submission);
     res.json({ success: true, id: result.insertedId });
-  } catch {
-    res.status(500).json({ error: "Failed to submit contact form" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to submit contact form' });
   }
 });
 
-app.get('/health', (req, res) => res.json({ status: "ok" }));
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Server is running on Vercel' });
+});
 
-const handler = serverless(app);
-
-// ⬅️ Very important: default export must be a named constant for Vercel runtime
-export default handler;
+export default serverless(app);
