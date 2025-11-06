@@ -1,10 +1,8 @@
 {
-  "version": 2,
-  "buildCommand": "echo 'No build needed'",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/index.js"
+  "functions": {
+    "api/**/*.js": {
+      "memory": 1024,
+      "maxDuration": 10
     }
-  ]
+  }
 }
