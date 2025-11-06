@@ -27,6 +27,7 @@ async function connectDB() {
   const uri = process.env.MONGO_URI;
   if (!uri) {
     throw new Error("MONGO_URI environment variable is not set");
+    throw new Error("MONGO_URI environment variable is not set");
   }
 
   if (!cached.promise) {
@@ -124,6 +125,8 @@ app.get('/api/products', async (req, res) => {
   } catch (err) {
     console.error('Products error:', err);
     res.status(500).json({ error: 'Failed to fetch products', message: err.message });
+    console.error('Products error:', err);
+    res.status(500).json({ error: 'Failed to fetch products', message: err.message });
   }
 });
 
@@ -139,6 +142,8 @@ app.get('/api/products/featured', async (req, res) => {
   } catch (err) {
     console.error('Featured products error:', err);
     res.status(500).json({ error: 'Failed to fetch featured products', message: err.message });
+    console.error('Featured products error:', err);
+    res.status(500).json({ error: 'Failed to fetch featured products', message: err.message });
   }
 });
 
@@ -150,6 +155,8 @@ app.get('/api/categories', async (req, res) => {
       .limit(50);
     res.json(categories);
   } catch (err) {
+    console.error('Categories error:', err);
+    res.status(500).json({ error: 'Failed to fetch categories', message: err.message });
     console.error('Categories error:', err);
     res.status(500).json({ error: 'Failed to fetch categories', message: err.message });
   }
@@ -165,6 +172,8 @@ app.get('/api/testimonials', async (req, res) => {
   } catch (err) {
     console.error('Testimonials error:', err);
     res.status(500).json({ error: 'Failed to fetch testimonials', message: err.message });
+    console.error('Testimonials error:', err);
+    res.status(500).json({ error: 'Failed to fetch testimonials', message: err.message });
   }
 });
 
@@ -178,6 +187,8 @@ app.post('/api/contact', async (req, res) => {
     console.error('Contact error:', err);
     res.status(500).json({ error: 'Failed to submit contact form', message: err.message });
   }
+    console.error('Contact error:', err);
+    res.status(500).json({ error: 'Failed to submit contact form', message: err.message });
 });
 
 // Handle 404s (unchanged)
@@ -187,3 +198,4 @@ app.use((req, res) => {
 
 // Export the serverless function (unchanged)
 export default serverless(app);
+
