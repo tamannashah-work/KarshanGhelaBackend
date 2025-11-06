@@ -126,7 +126,13 @@ app.post('/api/contact', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Server is running on Vercel' });
+  const mongoUri = process.env.MONGO_URI;
+  res.json({
+    status: 'ok',
+    message: 'Server is running on Vercel',
+    mongoConfigured: !!mongoUri,
+    mongoUriPrefix: mongoUri ? mongoUri.substring(0, 20) : 'not set'
+  });
 });
 
 // Root route
