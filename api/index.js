@@ -34,10 +34,12 @@ async function connectDB() {
 
   if (!cached.promise) {
     const opts = {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
+      maxPoolSize: 1,
+      minPoolSize: 0,
     };
-    
+
     cached.promise = MongoClient.connect(uri, opts).then((client) => {
       return {
         client,
