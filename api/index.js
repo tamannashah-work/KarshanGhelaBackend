@@ -8,7 +8,7 @@ dotenv.config();
 
 const app = express();
 
-// ✅ Proper CORS
+// CORS configuration
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -17,23 +17,41 @@ app.use(cors({
 
 app.use(express.json());
 
-// ✅ Correct MongoDB connection caching for Vercel
+// MongoDB connection caching for Vercel
 let cached = global.mongo;
-if (!cached) cached = global.mongo = { conn: null, promise: null };
+if (!cached) {
+  cached = global.mongo = { conn: null, promise: null };
+}
 
 async function connectDB() {
   if (cached.conn) return cached.conn.db;
 
   const uri = process.env.MONGO_URI;
-  if (!uri) throw new Error("MONGO_URI missing");
+  if (!uri) {
+    throw new Error("Please define the MONGO_URI environment variable inside .env");
+  }
 
   if (!cached.promise) {
-    cached.promise = new MongoClient(uri).connect().then((client) => {
-      return { client, db: client.db("KarshanGhela") };
+    const opts = {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    };
+
+    cached.promise = MongoClient.connect(uri, opts).then((client) => {
+      return {
+        client,
+        db: client.db(process.env.MONGO_DB || 'KarshanGhela'),
+      };
     });
   }
 
-  cached.conn = await cached.promise;
+  try {
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
+  }
+
   return cached.conn.db;
 }
 
