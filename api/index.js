@@ -1,201 +1,164 @@
-import express from 'express';
-import cors from 'cors';
-import mongoose from 'mongoose';
-import serverless from 'serverless-http';
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import { MongoClient, ObjectId } from "mongodb";
+import serverless from "serverless-http";
+
+dotenv.config();
 
 const app = express();
 
-// CORS configuration (unchanged)
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-}));
-
+app.use(cors());
 app.use(express.json());
 
-// Mongoose connection caching (similar to your original)
-let cached = global.mongoose;
+// MongoDB cached connection object
+let cached = global.mongo;
 if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
+  cached = global.mongo = { client: null, db: null, promise: null };
 }
 
 async function connectDB() {
-  if (cached.conn) {
-    return cached.conn;
-  }
+  if (cached.db) return cached.db;
 
-  const uri = process.env.MONGO_URI;
+  const uri = process.env.MONGO_URI || process.env.VITE_MONGO_URI;
   if (!uri) {
-    throw new Error("MONGO_URI environment variable is not set");
-    throw new Error("MONGO_URI environment variable is not set");
+    throw new Error("MONGO_URI environment variable is not defined");
   }
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(uri, {
-      dbName: 'KarshanGhela',  // Specify DB name
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-    });
+    cached.promise = (async () => {
+      cached.client = new MongoClient(uri);
+      await cached.client.connect();
+      cached.db = cached.client.db("KarshanGhela");
+      console.log("Connected to MongoDB Atlas");
+      return cached.db;
+    })();
   }
-
-  try {
-    cached.conn = await cached.promise;
-  } catch (e) {
-    cached.promise = null;
-    throw e;
-  }
-
-  return cached.conn;
+  await cached.promise;
+  return cached.db;
 }
 
-// Define Mongoose schemas/models (add based on your data)
-const productSchema = new mongoose.Schema({
-  name: String,
-  category_id: mongoose.Schema.Types.ObjectId,
-  is_featured: Boolean,
-  display_order: Number,
-  // Add other fields as needed
-});
-
-const categorySchema = new mongoose.Schema({
-  name: String,
-  display_order: Number,
-  // Add other fields
-});
-
-const testimonialSchema = new mongoose.Schema({
-  content: String,
-  is_active: Boolean,
-  display_order: Number,
-  // Add other fields
-});
-
-const contactSchema = new mongoose.Schema({
-  name: String,
-  email: String,
-  message: String,
-  status: { type: String, default: 'pending' },
-  created_at: { type: Date, default: Date.now },
-});
-
-const Product = mongoose.model('Product', productSchema);
-const Category = mongoose.model('Category', categorySchema);
-const Testimonial = mongoose.model('Testimonial', testimonialSchema);
-const Contact = mongoose.model('ContactSubmission', contactSchema);  // Assuming collection name
-
-// Root route (unchanged)
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'Karshan Ghela API',
-    status: 'running',
-    endpoints: [
-      '/api/health',
-      '/api/products',
-      '/api/products/featured',
-      '/api/categories',
-      '/api/testimonials',
-      '/api/contact (POST)'
-    ]
-  });
-});
-
-// Health check (unchanged)
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Server is running on Vercel',
-    timestamp: new Date().toISOString(),
-    env: {
-      hasMongoUri: !!process.env.MONGO_URI,
-      nodeEnv: process.env.NODE_ENV
-    }
-  });
-});
-
-// Products routes (updated with Mongoose)
-app.get('/api/products', async (req, res) => {
+// API routes
+app.get("/api/products", async (req, res) => {
   try {
-    await connectDB();
-    const products = await Product.find({})
-      .sort({ display_order: 1 })
-      .limit(50)  // Keep the limit to prevent timeouts
-      .populate('category_id');  // If you want to auto-populate categories
+    const database = await connectDB();
+    const productsCollection = database.collection("products");
+    const categoriesCollection = database.collection("categories");
 
-    res.json(products);
-  } catch (err) {
-    console.error('Products error:', err);
-    res.status(500).json({ error: 'Failed to fetch products', message: err.message });
-    console.error('Products error:', err);
-    res.status(500).json({ error: 'Failed to fetch products', message: err.message });
+    const products = await productsCollection.find({}).sort({ display_order: 1 }).toArray();
+    const categories = await categoriesCollection.find({}).toArray();
+
+    const categoryMap = {};
+    categories.forEach((cat) => {
+      categoryMap[cat._id.toString()] = cat;
+    });
+
+    const productsWithCategory = products.map((product) => ({
+      ...product,
+      category: categoryMap[product.category_id?.toString()] || null,
+    }));
+
+    res.json(productsWithCategory);
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    res.status(500).json({ error: "Failed to fetch products" });
   }
 });
 
-app.get('/api/products/featured', async (req, res) => {
+app.get("/api/products/featured", async (req, res) => {
   try {
-    await connectDB();
-    const products = await Product.find({ is_featured: true })
-      .sort({ display_order: 1 })
-      .limit(20)
-      .populate('category_id');
+    const database = await connectDB();
+    const productsCollection = database.collection("products");
+    const categoriesCollection = database.collection("categories");
 
-    res.json(products);
-  } catch (err) {
-    console.error('Featured products error:', err);
-    res.status(500).json({ error: 'Failed to fetch featured products', message: err.message });
-    console.error('Featured products error:', err);
-    res.status(500).json({ error: 'Failed to fetch featured products', message: err.message });
+    const products = await productsCollection
+      .find({ is_featured: true })
+      .sort({ display_order: 1 })
+      .toArray();
+
+    const categories = await categoriesCollection.find({}).toArray();
+
+    const categoryMap = {};
+    categories.forEach((cat) => {
+      categoryMap[cat._id.toString()] = cat;
+    });
+
+    const productsWithCategory = products.map((product) => ({
+      ...product,
+      category: categoryMap[product.category_id?.toString()] || null,
+    }));
+
+    res.json(productsWithCategory);
+  } catch (error) {
+    console.error("Error fetching featured products:", error);
+    res.status(500).json({ error: "Failed to fetch featured products" });
   }
 });
 
-app.get('/api/categories', async (req, res) => {
+app.get("/api/categories", async (req, res) => {
   try {
-    await connectDB();
-    const categories = await Category.find({})
+    const database = await connectDB();
+    const categoriesCollection = database.collection("categories");
+
+    const categories = await categoriesCollection
+      .find({})
       .sort({ display_order: 1 })
-      .limit(50);
+      .toArray();
+
     res.json(categories);
-  } catch (err) {
-    console.error('Categories error:', err);
-    res.status(500).json({ error: 'Failed to fetch categories', message: err.message });
-    console.error('Categories error:', err);
-    res.status(500).json({ error: 'Failed to fetch categories', message: err.message });
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    res.status(500).json({ error: "Failed to fetch categories" });
   }
 });
 
-app.get('/api/testimonials', async (req, res) => {
+app.get("/api/testimonials", async (req, res) => {
   try {
-    await connectDB();
-    const testimonials = await Testimonial.find({ is_active: true })
+    const database = await connectDB();
+    const testimonialsCollection = database.collection("testimonials");
+
+    const testimonials = await testimonialsCollection
+      .find({ is_active: true })
       .sort({ display_order: 1 })
-      .limit(50);
+      .toArray();
+
     res.json(testimonials);
-  } catch (err) {
-    console.error('Testimonials error:', err);
-    res.status(500).json({ error: 'Failed to fetch testimonials', message: err.message });
-    console.error('Testimonials error:', err);
-    res.status(500).json({ error: 'Failed to fetch testimonials', message: err.message });
+  } catch (error) {
+    console.error("Error fetching testimonials:", error);
+    res.status(500).json({ error: "Failed to fetch testimonials" });
   }
 });
 
-app.post('/api/contact', async (req, res) => {
+app.post("/api/contact", async (req, res) => {
   try {
-    await connectDB();
-    const submission = new Contact(req.body);
-    await submission.save();
-    res.json({ success: true, id: submission._id });
-  } catch (err) {
-    console.error('Contact error:', err);
-    res.status(500).json({ error: 'Failed to submit contact form', message: err.message });
+    const database = await connectDB();
+    const contactCollection = database.collection("contact_submissions");
+
+    const submission = {
+      ...req.body,
+      status: "pending",
+      created_at: new Date(),
+    };
+
+    const result = await contactCollection.insertOne(submission);
+
+    res.json({
+      success: true,
+      id: result.insertedId,
+    });
+  } catch (error) {
+    console.error("Error submitting contact form:", error);
+    res.status(500).json({ error: "Failed to submit contact form" });
   }
-    console.error('Contact error:', err);
-    res.status(500).json({ error: 'Failed to submit contact form', message: err.message });
 });
 
-// Handle 404s (unchanged)
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", message: "Server is running" });
+});
+
+// For 404
 app.use((req, res) => {
-  res.status(404).json({ error: 'Not found', path: req.path });
+  res.status(404).json({ error: "Not found", path: req.path });
 });
 
-// Export the serverless function (unchanged)
 export default serverless(app);
-
