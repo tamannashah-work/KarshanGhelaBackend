@@ -33,7 +33,12 @@ async function connectDB() {
   }
 
   if (!cached.promise) {
-    cached.promise = MongoClient.connect(uri).then((client) => {
+    const opts = {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    };
+    
+    cached.promise = MongoClient.connect(uri, opts).then((client) => {
       return {
         client,
         db: client.db(process.env.MONGO_DB || 'KarshanGhela'),
