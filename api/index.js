@@ -29,7 +29,7 @@ async function connectDB() {
   return db;
 }
 
-app.get('/api/products', async (req, res) => {
+app.get('/products', async (req, res) => {
   try {
     const database = await connectDB();
     const products = await database.collection('products').find({}).sort({ display_order: 1 }).toArray();
@@ -45,7 +45,7 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-app.get('/api/products/featured', async (req, res) => {
+app.get('/products/featured', async (req, res) => {
   try {
     const database = await connectDB();
     const products = await database.collection('products').find({ is_featured: true }).sort({ display_order: 1 }).toArray();
@@ -61,7 +61,7 @@ app.get('/api/products/featured', async (req, res) => {
   }
 });
 
-app.get('/api/categories', async (req, res) => {
+app.get('/categories', async (req, res) => {
   try {
     const database = await connectDB();
     const categories = await database.collection('categories').find({}).sort({ display_order: 1 }).toArray();
@@ -72,7 +72,7 @@ app.get('/api/categories', async (req, res) => {
   }
 });
 
-app.get('/api/testimonials', async (req, res) => {
+app.get('/testimonials', async (req, res) => {
   try {
     const database = await connectDB();
     const testimonials = await database.collection('testimonials').find({ is_active: true }).sort({ display_order: 1 }).toArray();
@@ -83,7 +83,7 @@ app.get('/api/testimonials', async (req, res) => {
   }
 });
 
-app.post('/api/contact', async (req, res) => {
+app.post('/contact', async (req, res) => {
   try {
     const database = await connectDB();
     const submission = { ...req.body, status: 'pending', created_at: new Date() };
@@ -95,7 +95,7 @@ app.post('/api/contact', async (req, res) => {
   }
 });
 
-app.get('/api/health', (req, res) => {
+app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running on Vercel' });
 });
 
