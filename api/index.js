@@ -137,4 +137,10 @@ app.get('/', (req, res) => {
   });
 });
 
+// Handle 404s
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found', path: req.path });
+});
+
+// Export the serverless function
 export default serverless(app);
