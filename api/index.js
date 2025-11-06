@@ -13,20 +13,23 @@ app.use(express.json());
 
 let db;
 let client;
+let cached = global.mongo;
+if (!cached) cached = global.mongo = { conn: null, promise: null };
 
 async function connectDB() {
-  if (db) return db;
+  if (cached.conn) return cached.conn;
 
-  const uri = process.env.MONGO_URI || process.env.VITE_MONGO_URI;
-  if (!uri) {
-    throw new Error('MONGO_URI environment variable is not defined');
+  const uri = process.env.MONGO_URI;
+  if (!cached.promise) {
+    cached.promise = new MongoClient(uri).connect().then((client) => {
+      return {
+        client,
+        db: client.db("KarshanGhela"),
+      };
+    });
   }
-
-  client = new MongoClient(uri);
-  await client.connect();
-  db = client.db('KarshanGhela');
-  console.log('Connected to MongoDB (serverless)');
-  return db;
+  cached.conn = await cached.promise;
+  return cached.conn.db;
 }
 
 app.get('/products', async (req, res) => {
