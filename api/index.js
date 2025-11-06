@@ -1,11 +1,27 @@
-import { MongoClient } from 'mongodb';
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
+import serverless from 'serverless-http';
 
-// MongoDB connection caching
-let cachedDb = null;
+const app = express();
+
+// CORS configuration (unchanged)
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+}));
+
+app.use(express.json());
+
+// Mongoose connection caching (similar to your original)
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
 
 async function connectDB() {
-  if (cachedDb) {
-    return cachedDb;
+  if (cached.conn) {
+    return cached.conn;
   }
 
   const uri = process.env.MONGO_URI;
@@ -13,129 +29,161 @@ async function connectDB() {
     throw new Error("MONGO_URI environment variable is not set");
   }
 
-  try {
-    const client = await MongoClient.connect(uri, {
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(uri, {
+      dbName: 'KarshanGhela',  // Specify DB name
       serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
     });
-    cachedDb = client.db(process.env.MONGO_DB || 'KarshanGhela');
-    return cachedDb;
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    throw error;
   }
-}
-
-export default async function handler(req, res) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  // Handle OPTIONS request
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  const { method, url } = req;
 
   try {
-    // Root route
-    if (url === '/' || url === '/api') {
-      return res.status(200).json({
-        message: 'Karshan Ghela API',
-        endpoints: [
-          '/api/health',
-          '/api/products',
-          '/api/products/featured',
-          '/api/categories',
-          '/api/testimonials',
-          '/api/contact (POST)'
-        ]
-      });
-    }
-
-    // Health check (no DB)
-    if (url === '/api/health') {
-      return res.status(200).json({
-        status: 'ok',
-        message: 'Server is running on Vercel',
-        timestamp: new Date().toISOString(),
-        env: {
-          hasMongoUri: !!process.env.MONGO_URI
-        }
-      });
-    }
-
-    // Test DB connection
-    if (url === '/api/test-db') {
-      try {
-        await connectDB();
-        return res.status(200).json({ status: 'connected', message: 'MongoDB connected' });
-      } catch (error) {
-        return res.status(500).json({ error: error.message });
-      }
-    }
-
-    // Products routes
-    if (url === '/api/products' && method === 'GET') {
-      const db = await connectDB();
-      const products = await db.collection('products').find({}).sort({ display_order: 1 }).toArray();
-      const categories = await db.collection('categories').find({}).toArray();
-
-      const categoryMap = Object.fromEntries(categories.map(cat => [cat._id.toString(), cat]));
-      const productsWithCategory = products.map(p => ({
-        ...p,
-        category: categoryMap[p.category_id?.toString()] || null
-      }));
-
-      return res.status(200).json(productsWithCategory);
-    }
-
-    if (url === '/api/products/featured' && method === 'GET') {
-      const db = await connectDB();
-      const products = await db.collection('products').find({ is_featured: true }).sort({ display_order: 1 }).toArray();
-      const categories = await db.collection('categories').find({}).toArray();
-
-      const categoryMap = Object.fromEntries(categories.map(cat => [cat._id.toString(), cat]));
-      const productsWithCategory = products.map(p => ({
-        ...p,
-        category: categoryMap[p.category_id?.toString()] || null
-      }));
-
-      return res.status(200).json(productsWithCategory);
-    }
-
-    // Categories route
-    if (url === '/api/categories' && method === 'GET') {
-      const db = await connectDB();
-      const categories = await db.collection('categories').find({}).sort({ display_order: 1 }).toArray();
-      return res.status(200).json(categories);
-    }
-
-    // Testimonials route
-    if (url === '/api/testimonials' && method === 'GET') {
-      const db = await connectDB();
-      const testimonials = await db.collection('testimonials').find({ is_active: true }).sort({ display_order: 1 }).toArray();
-      return res.status(200).json(testimonials);
-    }
-
-    // Contact form
-    if (url === '/api/contact' && method === 'POST') {
-      const db = await connectDB();
-      const submission = {
-        ...req.body,
-        status: 'pending',
-        created_at: new Date()
-      };
-      const result = await db.collection('contact_submissions').insertOne(submission);
-      return res.status(200).json({ success: true, id: result.insertedId });
-    }
-
-    // 404 for all other routes
-    return res.status(404).json({ error: 'Not found', path: url });
-
-  } catch (error) {
-    console.error('Handler error:', error);
-    return res.status(500).json({ error: 'Internal server error', message: error.message });
+    cached.conn = await cached.promise;
+  } catch (e) {
+    cached.promise = null;
+    throw e;
   }
+
+  return cached.conn;
 }
+
+// Define Mongoose schemas/models (add based on your data)
+const productSchema = new mongoose.Schema({
+  name: String,
+  category_id: mongoose.Schema.Types.ObjectId,
+  is_featured: Boolean,
+  display_order: Number,
+  // Add other fields as needed
+});
+
+const categorySchema = new mongoose.Schema({
+  name: String,
+  display_order: Number,
+  // Add other fields
+});
+
+const testimonialSchema = new mongoose.Schema({
+  content: String,
+  is_active: Boolean,
+  display_order: Number,
+  // Add other fields
+});
+
+const contactSchema = new mongoose.Schema({
+  name: String,
+  email: String,
+  message: String,
+  status: { type: String, default: 'pending' },
+  created_at: { type: Date, default: Date.now },
+});
+
+const Product = mongoose.model('Product', productSchema);
+const Category = mongoose.model('Category', categorySchema);
+const Testimonial = mongoose.model('Testimonial', testimonialSchema);
+const Contact = mongoose.model('ContactSubmission', contactSchema);  // Assuming collection name
+
+// Root route (unchanged)
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Karshan Ghela API',
+    status: 'running',
+    endpoints: [
+      '/api/health',
+      '/api/products',
+      '/api/products/featured',
+      '/api/categories',
+      '/api/testimonials',
+      '/api/contact (POST)'
+    ]
+  });
+});
+
+// Health check (unchanged)
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Server is running on Vercel',
+    timestamp: new Date().toISOString(),
+    env: {
+      hasMongoUri: !!process.env.MONGO_URI,
+      nodeEnv: process.env.NODE_ENV
+    }
+  });
+});
+
+// Products routes (updated with Mongoose)
+app.get('/api/products', async (req, res) => {
+  try {
+    await connectDB();
+    const products = await Product.find({})
+      .sort({ display_order: 1 })
+      .limit(50)  // Keep the limit to prevent timeouts
+      .populate('category_id');  // If you want to auto-populate categories
+
+    res.json(products);
+  } catch (err) {
+    console.error('Products error:', err);
+    res.status(500).json({ error: 'Failed to fetch products', message: err.message });
+  }
+});
+
+app.get('/api/products/featured', async (req, res) => {
+  try {
+    await connectDB();
+    const products = await Product.find({ is_featured: true })
+      .sort({ display_order: 1 })
+      .limit(20)
+      .populate('category_id');
+
+    res.json(products);
+  } catch (err) {
+    console.error('Featured products error:', err);
+    res.status(500).json({ error: 'Failed to fetch featured products', message: err.message });
+  }
+});
+
+app.get('/api/categories', async (req, res) => {
+  try {
+    await connectDB();
+    const categories = await Category.find({})
+      .sort({ display_order: 1 })
+      .limit(50);
+    res.json(categories);
+  } catch (err) {
+    console.error('Categories error:', err);
+    res.status(500).json({ error: 'Failed to fetch categories', message: err.message });
+  }
+});
+
+app.get('/api/testimonials', async (req, res) => {
+  try {
+    await connectDB();
+    const testimonials = await Testimonial.find({ is_active: true })
+      .sort({ display_order: 1 })
+      .limit(50);
+    res.json(testimonials);
+  } catch (err) {
+    console.error('Testimonials error:', err);
+    res.status(500).json({ error: 'Failed to fetch testimonials', message: err.message });
+  }
+});
+
+app.post('/api/contact', async (req, res) => {
+  try {
+    await connectDB();
+    const submission = new Contact(req.body);
+    await submission.save();
+    res.json({ success: true, id: submission._id });
+  } catch (err) {
+    console.error('Contact error:', err);
+    res.status(500).json({ error: 'Failed to submit contact form', message: err.message });
+  }
+});
+
+// Handle 404s (unchanged)
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found', path: req.path });
+});
+
+// Export the serverless function (unchanged)
+export default serverless(app);
