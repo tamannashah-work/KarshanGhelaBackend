@@ -142,7 +142,7 @@ app.post('/api/contact', async (req, res) => {
         const now = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
         await resend.emails.send({
           from: 'onboarding@resend.dev', // You can only change this after verifying a domain in Resend
-          to: 'ts.work.1809@gmail.com',
+          to: process.env.EMAIL,
           subject: `New Enquiry from ${req.body.name} - ${now}`,
           html: `
             <h3>New Enquiry From ${req.body.name}</h3>
